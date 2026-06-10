@@ -133,7 +133,6 @@ SMRP Nestora is a mobile application developed using **React Native (Expo)** and
 
 * React Native
 * Expo
-* Redux Toolkit
 * NativeWind (Tailwind CSS)
 
 ### Backend
