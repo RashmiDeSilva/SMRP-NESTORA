@@ -161,12 +161,29 @@ SMRP Nestora is a mobile application developed using **React Native (Expo)** and
 * PayHere / Stripe
 
 ## Project Structure
-
 ```text
-backend/
-frontend/
-docs/
-README.md
+SMRP-NESTORA/
+│
+├── backend/                 # Backend API and server-side logic
+│   ├── config/              # Database and application configurations
+│   ├── controllers/         # Request handling logic
+│   ├── middleware/          # Authentication and custom middleware
+│   ├── models/              # MongoDB/Mongoose models
+│   └── routes/              # API routes
+│
+├── docs/                    # Project documentation
+│   ├── diagrams/            # System diagrams and UML diagrams
+│   ├── proposal/            # Project proposal documents
+│   └── reports/             # Reports and project deliverables
+│
+├── frontend/                # React Native mobile application
+│   ├── assets/              # Images, icons, and static resources
+│   └── src/
+│       ├── components/      # Reusable UI components
+│       ├── navigation/      # Navigation configuration
+│       └── screens/         # Application screens/pages
+│
+└── README.md                # Project documentation
 ```
 
 ## Team Members
