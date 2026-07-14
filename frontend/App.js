@@ -8,9 +8,13 @@ import HomeScreen from './src/screens/HomeScreen';
 import OwnerDashboardScreen from './src/screens/OwnerDashboardScreen';
 import AddBoardingScreen from './src/screens/AddBoardingScreen';
 import StudentDashboardScreen from './src/screens/StudentDashboardScreen';
-import { loginApi } from './src/services/authService';
+import InternDashboardScreen from './src/screens/InternDashboardScreen';
+import EmployeeDashboardScreen from './src/screens/EmployeeDashboardScreen';
+import BoardingDetailsScreen from './src/screens/BoardingDetailsScreen';
+import { loginApi, toggleSavedBoardingApi, getSavedBoardingsApi } from './src/services/authService';
 import { addBoardingApi, getBoardingsApi, deleteBoardingApi, updateBoardingApi } from './src/services/boardingService';
 import { getAllBoardingsApi } from './src/services/studentService';
+import { createBookingApi, getBookingsApi, updateBookingStatusApi } from './src/services/bookingService';
 
 
 export default function App() {
@@ -29,23 +33,86 @@ function AppContent() {
   const [boardings, setBoardings] = useState([]);
   const [allBoardings, setAllBoardings] = useState([]);
   const [editingBoarding, setEditingBoarding] = useState(null);
+  const [selectedBoarding, setSelectedBoarding] = useState(null);
+  const [savedBoardingIds, setSavedBoardingIds] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [studentActiveFilter, setStudentActiveFilter] = useState('all');
 
-  // Fetch boardings when current user changes
+  const toggleSaveBoarding = async (id) => {
+    const email = currentUser ? currentUser.email : '';
+    const token = currentUser ? currentUser.token : null;
+    
+    // Optimistic UI toggle updates
+    setSavedBoardingIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((item) => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+
+    if (email) {
+      const result = await toggleSavedBoardingApi(id, token, email);
+      if (result.success) {
+        // Normalize ObjectId objects to plain strings so .includes() works
+        const normalized = (result.savedBoardingIds || []).map((oid) =>
+          typeof oid === 'object' ? oid.toString() : oid
+        );
+        setSavedBoardingIds(normalized);
+      }
+    }
+  };
+
+  // Fetch boardings, bookings, and saved items when current user changes
   useEffect(() => {
     if (currentUser && currentUser.email) {
       if (currentUser.role === 'Boarding Owner') {
         loadOwnerBoardings();
+        loadBookings();
       } else {
         loadAllBoardings();
+        loadBookings();
+        loadSavedBoardings();
       }
     }
   }, [currentUser]);
+
+  const loadSavedBoardings = async () => {
+    const email = currentUser ? currentUser.email : '';
+    if (!email) return;
+    console.log(`Loading saved boardings for: ${email}`);
+    const token = currentUser ? currentUser.token : null;
+    const result = await getSavedBoardingsApi(token, email);
+    if (result.success) {
+      // Normalize ObjectId objects to plain strings so .includes() works
+      const normalized = (result.savedBoardingIds || []).map((id) =>
+        typeof id === 'object' ? id.toString() : id
+      );
+      setSavedBoardingIds(normalized);
+    } else {
+      console.log('Failed to fetch saved boardings');
+    }
+  };
+
+  const loadBookings = async () => {
+    const email = currentUser ? currentUser.email : '';
+    if (!email) return;
+    console.log(`Loading bookings for: ${email}`);
+    const token = currentUser ? currentUser.token : null;
+    const result = await getBookingsApi(token, email);
+    if (result.success) {
+      setBookings(result.bookings);
+    } else {
+      console.log('Failed to fetch bookings:', result.message);
+    }
+  };
 
   const loadOwnerBoardings = async () => {
     const ownerEmail = currentUser ? currentUser.email : '';
     if (!ownerEmail) return;
     console.log(`Loading boardings for owner: ${ownerEmail}`);
-    const result = await getBoardingsApi(ownerEmail);
+    const token = currentUser ? currentUser.token : null;
+    const result = await getBoardingsApi(ownerEmail, token);
     if (result.success) {
       setBoardings(result.boardings);
     } else {
@@ -55,7 +122,8 @@ function AppContent() {
 
   const loadAllBoardings = async () => {
     console.log('Loading all boardings for student...');
-    const result = await getAllBoardingsApi();
+    const token = currentUser ? currentUser.token : null;
+    const result = await getAllBoardingsApi(token);
     if (result.success) {
       setAllBoardings(result.boardings);
     } else {
@@ -84,12 +152,25 @@ function AppContent() {
               : 'Authenticated by local state database';
 
             alert(`Logged in successfully! (${messageSource})`);
-            const user = result.user;
+            const user = { ...result.user, token: result.token };
             setCurrentUser(user);
+
+            // Seed saved boardings from login response immediately
+            if (result.user?.savedBoardingIds) {
+              setSavedBoardingIds(
+                result.user.savedBoardingIds.map((id) =>
+                  typeof id === 'object' ? id.toString() : id
+                )
+              );
+            }
 
             // Role-based navigation
             if (user?.role === 'Boarding Owner') {
               setCurrentScreen('owner_dashboard');
+            } else if (user?.role === 'Intern') {
+              setCurrentScreen('intern_dashboard');
+            } else if (user?.role === 'Employee') {
+              setCurrentScreen('employee_dashboard');
             } else {
               setCurrentScreen('student_dashboard');
             }
@@ -127,12 +208,124 @@ function AppContent() {
         onLogout={() => {
           setCurrentUser(null);
           setAllBoardings([]);
+          setBookings([]);
           setCurrentScreen('login');
         }}
+        onViewBoarding={(boarding) => {
+          setSelectedBoarding(boarding);
+          setCurrentScreen('boarding_details');
+        }}
+        savedBoardingIds={savedBoardingIds}
+        bookings={bookings}
+        activeFilter={studentActiveFilter}
+        setActiveFilter={setStudentActiveFilter}
       />
     );
   }
 
+  if (currentScreen === 'intern_dashboard') {
+    return (
+      <InternDashboardScreen
+        currentUser={currentUser}
+        boardings={allBoardings}
+        onLogout={() => {
+          setCurrentUser(null);
+          setAllBoardings([]);
+          setBookings([]);
+          setCurrentScreen('login');
+        }}
+        onViewBoarding={(boarding) => {
+          setSelectedBoarding(boarding);
+          setCurrentScreen('boarding_details');
+        }}
+        savedBoardingIds={savedBoardingIds}
+        bookings={bookings}
+        activeFilter={studentActiveFilter}
+        setActiveFilter={setStudentActiveFilter}
+      />
+    );
+  }
+
+  if (currentScreen === 'employee_dashboard') {
+    return (
+      <EmployeeDashboardScreen
+        currentUser={currentUser}
+        boardings={allBoardings}
+        onLogout={() => {
+          setCurrentUser(null);
+          setAllBoardings([]);
+          setBookings([]);
+          setCurrentScreen('login');
+        }}
+        onViewBoarding={(boarding) => {
+          setSelectedBoarding(boarding);
+          setCurrentScreen('boarding_details');
+        }}
+        savedBoardingIds={savedBoardingIds}
+        bookings={bookings}
+        activeFilter={studentActiveFilter}
+        setActiveFilter={setStudentActiveFilter}
+      />
+    );
+  }
+
+  if (currentScreen === 'boarding_details') {
+    return (
+      <BoardingDetailsScreen
+        boarding={selectedBoarding}
+        onBack={() => {
+          setSelectedBoarding(null);
+          if (currentUser?.role === 'Employee') {
+            setCurrentScreen('employee_dashboard');
+          } else if (currentUser?.role === 'Intern') {
+            setCurrentScreen('intern_dashboard');
+          } else if (currentUser?.role === 'Boarding Owner') {
+            setCurrentScreen('owner_dashboard');
+          } else {
+            setCurrentScreen('student_dashboard');
+          }
+        }}
+        isSaved={selectedBoarding ? savedBoardingIds.includes(selectedBoarding._id) : false}
+        onToggleSave={toggleSaveBoarding}
+        onBook={async (message) => {
+          const token = currentUser ? currentUser.token : null;
+          const email = currentUser ? currentUser.email : null;
+          console.log(`[App.js onBook] boardingId=${selectedBoarding?._id} email=${email} token=${token ? 'present' : 'missing'}`);
+          
+          if (!selectedBoarding?._id) {
+            alert('No boarding selected.');
+            return;
+          }
+
+          const result = await createBookingApi(
+            { boardingId: selectedBoarding._id, message },
+            token,
+            email
+          );
+          console.log('[App.js onBook] result:', JSON.stringify(result));
+          
+          if (result.success) {
+            alert('Booking inquiry sent successfully!');
+            await loadBookings();
+            setStudentActiveFilter('bookings');
+            setSelectedBoarding(null);
+            
+            if (currentUser?.role === 'Employee') {
+              setCurrentScreen('employee_dashboard');
+            } else if (currentUser?.role === 'Intern') {
+              setCurrentScreen('intern_dashboard');
+            } else if (currentUser?.role === 'Boarding Owner') {
+              setCurrentScreen('owner_dashboard');
+            } else {
+              setCurrentScreen('student_dashboard');
+            }
+          } else {
+            alert(`Booking failed: ${result.message || 'Unknown error'}`);
+          }
+        }}
+      />
+    );
+  }
 
   if (currentScreen === 'owner_dashboard') {
     return (
@@ -142,6 +335,7 @@ function AppContent() {
         onLogout={() => {
           setCurrentUser(null);
           setBoardings([]);
+          setBookings([]);
           setCurrentScreen('login');
         }}
         onAddBoarding={() => {
@@ -149,7 +343,8 @@ function AppContent() {
           setCurrentScreen('add_boarding');
         }}
         onDeleteBoarding={async (id) => {
-          const result = await deleteBoardingApi(id);
+          const token = currentUser ? currentUser.token : null;
+          const result = await deleteBoardingApi(id, token);
           if (result.success) {
             alert('Boarding place deleted successfully!');
             await loadOwnerBoardings();
@@ -160,6 +355,29 @@ function AppContent() {
         onEditBoarding={(boarding) => {
           setEditingBoarding(boarding);
           setCurrentScreen('add_boarding');
+        }}
+        bookings={bookings}
+        onConfirmBooking={async (bookingId) => {
+          const token = currentUser ? currentUser.token : null;
+          const email = currentUser ? currentUser.email : '';
+          const result = await updateBookingStatusApi(bookingId, 'confirmed', token, email);
+          if (result.success) {
+            alert('Booking request confirmed!');
+            await loadBookings();
+          } else {
+            alert('Failed to confirm booking.');
+          }
+        }}
+        onRejectBooking={async (bookingId) => {
+          const token = currentUser ? currentUser.token : null;
+          const email = currentUser ? currentUser.email : '';
+          const result = await updateBookingStatusApi(bookingId, 'rejected', token, email);
+          if (result.success) {
+            alert('Booking request declined.');
+            await loadBookings();
+          } else {
+            alert('Failed to decline booking.');
+          }
         }}
       />
     );
@@ -183,20 +401,28 @@ function AppContent() {
           };
 
           let result;
+          const token = currentUser ? currentUser.token : null;
           if (editingBoarding) {
             console.log('Updating boarding with ID:', editingBoarding._id);
-            result = await updateBoardingApi(editingBoarding._id, boardingDataWithOwner);
+            result = await updateBoardingApi(editingBoarding._id, boardingDataWithOwner, token);
           } else {
             console.log('Adding new boarding');
-            result = await addBoardingApi(boardingDataWithOwner);
+            result = await addBoardingApi(boardingDataWithOwner, token);
           }
 
           if (result.success) {
-            alert(editingBoarding ? 'Boarding place updated successfully!' : 'New boarding place added successfully!');
-            setEditingBoarding(null);
-            // Refresh list
-            await loadOwnerBoardings();
+            // Instantly transition back to the dashboard and reset editing states
             setCurrentScreen('owner_dashboard');
+            setEditingBoarding(null);
+
+            // Reload the owner's boardings asynchronously in the background
+            loadOwnerBoardings();
+
+            // Notify the user in a non-blocking alert
+            const msg = editingBoarding 
+              ? 'Boarding place updated successfully!' 
+              : 'New boarding place added successfully!';
+            setTimeout(() => alert(msg), 50);
           } else {
             alert(`Failed to save boarding: ${result.message}`);
           }

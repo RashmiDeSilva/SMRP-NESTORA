@@ -1,15 +1,6 @@
-import { Platform } from 'react-native';
+import { API_URLS, API_URLS_DEV } from './apiConfig';
 
-// NOTE: When testing on a physical phone via Expo Go, replace this with your computer's local IP address (e.g. 192.168.1.x)
-const DEV_IP = '192.168.1.100'; 
-
-// Android emulator accesses the host machine's localhost via 10.0.2.2, iOS emulator uses localhost
-const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-const BACKEND_URLS = [
-  `http://${HOST}:5000/api/boardings`,
-  `http://${DEV_IP}:5000/api/boardings`,
-];
+const BACKEND_URLS = [API_URLS.boardings, API_URLS_DEV.boardings];
 
 // Session-based in-memory local fallback list
 let localBoardingsList = [];
@@ -18,7 +9,7 @@ let localBoardingsList = [];
  * Sends boarding data to the Node/Express/MongoDB backend database.
  * If the server is offline or network fails (or returns an error), it falls back to the local in-memory store.
  */
-export async function addBoardingApi(boardingData) {
+export async function addBoardingApi(boardingData, token) {
   // Sanitize numeric fields to prevent CastErrors on backend
   const sanitizedData = {
     ...boardingData,
@@ -34,6 +25,7 @@ export async function addBoardingApi(boardingData) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(sanitizedData),
       });
@@ -65,16 +57,17 @@ export async function addBoardingApi(boardingData) {
  * Fetches all boardings for a specific owner from the Node/Express/MongoDB backend database.
  * If the server is offline or network fails, it falls back to the local in-memory store.
  */
-export async function getBoardingsApi(ownerIdentifier) {
+export async function getBoardingsApi(ownerIdentifier, token) {
   const normalizedOwner = (ownerIdentifier || '').toLowerCase();
   
   for (const url of BACKEND_URLS) {
     try {
-      console.log(`Attempting to fetch boardings from: ${url}?owner=${normalizedOwner}`);
+      console.log(`Attempting to fetch boardings from: ${url}?owner=${encodeURIComponent(normalizedOwner)}`);
       const response = await fetch(`${url}?owner=${encodeURIComponent(normalizedOwner)}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
       });
 
@@ -101,7 +94,7 @@ export async function getBoardingsApi(ownerIdentifier) {
  * Deletes a boarding listing from the Node/Express/MongoDB backend database.
  * If the server is offline or network fails, it falls back to removing it from the local in-memory store.
  */
-export async function deleteBoardingApi(id) {
+export async function deleteBoardingApi(id, token) {
   for (const url of BACKEND_URLS) {
     try {
       console.log(`Attempting to delete boarding on: ${url}/${id}`);
@@ -109,6 +102,7 @@ export async function deleteBoardingApi(id) {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
       });
 
@@ -132,7 +126,7 @@ export async function deleteBoardingApi(id) {
  * Updates a boarding listing in the Node/Express/MongoDB backend database.
  * If the server is offline or network fails, it falls back to updating the local in-memory store.
  */
-export async function updateBoardingApi(id, boardingData) {
+export async function updateBoardingApi(id, boardingData, token) {
   // Sanitize numeric fields to prevent CastErrors on backend
   const sanitizedData = {
     ...boardingData,
@@ -148,6 +142,7 @@ export async function updateBoardingApi(id, boardingData) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(sanitizedData),
       });
@@ -179,4 +174,37 @@ export async function updateBoardingApi(id, boardingData) {
   const newLocal = { _id: id, ...sanitizedData, createdAt: new Date().toISOString() };
   localBoardingsList.unshift(newLocal);
   return { success: true, boarding: newLocal, source: 'local' };
+}
+
+/**
+ * Fetches boarding places by their exact name.
+ */
+export async function getBoardingByNameApi(name, token) {
+  for (const url of BACKEND_URLS) {
+    try {
+      console.log(`Attempting to fetch boarding by name on: ${url}/name/${encodeURIComponent(name)}`);
+      const response = await fetch(`${url}/name/${encodeURIComponent(name)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, boardings: data.boardings, source: 'database' };
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.log(`Server error fetching by name on ${url}:`, errorData.message || 'Unknown server error');
+      }
+    } catch (error) {
+      console.log(`Backend server at ${url} not available for fetching by name:`, error.message);
+    }
+  }
+
+  // Fallback: search in local list
+  console.log('Using local state database fallback for getBoardingByNameApi.');
+  const matches = localBoardingsList.filter(b => b.boardingName?.toLowerCase() === name.toLowerCase());
+  return { success: true, boardings: matches, source: 'local' };
 }

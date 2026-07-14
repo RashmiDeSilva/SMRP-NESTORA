@@ -1,15 +1,6 @@
-import { Platform } from 'react-native';
+import { API_URLS, API_URLS_DEV } from './apiConfig';
 
-// NOTE: When testing on a physical phone via Expo Go, replace this with your computer's local IP address (e.g. 192.168.1.x)
-const DEV_IP = '192.168.1.100'; 
-
-// Android emulator accesses the host machine's localhost via 10.0.2.2, iOS emulator uses localhost
-const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-const BACKEND_URLS = [
-  `http://${HOST}:5000/api/auth`,
-  `http://${DEV_IP}:5000/api/auth`,
-];
+const BACKEND_URLS = [API_URLS.auth, API_URLS_DEV.auth];
 
 /**
  * Sends sign up data to the Node/Express/MongoDB backend database.
@@ -94,4 +85,65 @@ export async function loginApi(email, password, registeredUser) {
   }
 
   return { success: false, message: 'User not found in local database. Please sign up first!' };
+}
+
+/**
+ * Persists saving/toggling a boarding ID in the database
+ */
+export async function toggleSavedBoardingApi(boardingId, token, email) {
+  for (const url of BACKEND_URLS) {
+    try {
+      console.log(`Attempting to toggle saved boarding on: ${url}/saved`);
+      const response = await fetch(`${url}/saved`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ boardingId, email }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, savedBoardingIds: data.savedBoardingIds };
+      } else {
+        const err = await response.json().catch(() => ({}));
+        console.log(`toggleSavedBoardingApi error ${response.status}:`, err.message);
+        return { success: false, message: err.message };
+      }
+    } catch (error) {
+      console.log(`Backend server at ${url} not available for saved toggle:`, error.message);
+    }
+  }
+  return { success: false };
+}
+
+/**
+ * Fetches the persistent saved boarding IDs list
+ */
+export async function getSavedBoardingsApi(token, email) {
+  for (const url of BACKEND_URLS) {
+    try {
+      console.log(`Attempting to fetch saved boardings from: ${url}/saved`);
+      const response = await fetch(`${url}/saved?email=${encodeURIComponent(email || '')}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, savedBoardingIds: data.savedBoardingIds };
+      } else {
+        const err = await response.json().catch(() => ({}));
+        console.log(`getSavedBoardingsApi error ${response.status}:`, err.message);
+        return { success: false, message: err.message };
+      }
+    } catch (error) {
+      console.log(`Backend server at ${url} not available for fetching saveds:`, error.message);
+    }
+  }
+  return { success: false };
 }

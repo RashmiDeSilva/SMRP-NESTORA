@@ -1,26 +1,21 @@
-import { Platform } from 'react-native';
+import { API_URLS, API_URLS_DEV } from './apiConfig';
 
-// NOTE: When testing on a physical phone via Expo Go, replace this with your computer's local IP address (e.g. 192.168.1.x)
-const DEV_IP = '192.168.1.100';
-
-const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-const BACKEND_URLS = [
-  `http://${HOST}:5000/api/boardings`,
-  `http://${DEV_IP}:5000/api/boardings`,
-];
+const BACKEND_URLS = [API_URLS.boardings, API_URLS_DEV.boardings];
 
 /**
  * Fetches ALL boarding listings from the database (for students to browse).
  * Falls back to an empty list if the backend is offline.
  */
-export async function getAllBoardingsApi() {
+export async function getAllBoardingsApi(token) {
   for (const url of BACKEND_URLS) {
     try {
       console.log(`Student: Fetching all boardings from: ${url}`);
       const response = await fetch(url, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
       });
 
       if (response.ok) {

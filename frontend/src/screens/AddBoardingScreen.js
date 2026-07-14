@@ -146,11 +146,16 @@ export default function AddBoardingScreen({ onBack, onSubmit, initialData }) {
       : ImagePicker.launchImageLibraryAsync)({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.85,
+        quality: 0.7,
+        base64: true,
       });
 
     if (!result.canceled && result.assets?.length > 0) {
-      return result.assets[0].uri;
+      const asset = result.assets[0];
+      if (asset.base64) {
+        return `data:image/jpeg;base64,${asset.base64}`;
+      }
+      return asset.uri;
     }
     return null;
   }, []);

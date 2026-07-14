@@ -26,35 +26,56 @@ export default function SignUpScreen({ onBack, onSignUpSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [selectedRole, setSelectedRole] = useState('Student');
+  const [selectedRole, setSelectedRole] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
 
   const roles = [
     { id: 'Student', label: 'Student', icon: 'book' },
-    { id: 'Intern', label: 'Intern', icon: 'award' },
     { id: 'Employee', label: 'Employee', icon: 'briefcase' },
     { id: 'Boarding Owner', label: 'Boarding Owner', icon: 'home' },
   ];
 
   const handleSignUp = async () => {
-    if (
-      !fullName ||
-      !email ||
-      !phoneNumber ||
-      !password ||
-      !confirmPassword
-    ) {
-      alert('Please fill in all fields');
+    // 1. Email validation: needs @ and ends with .com
+    if (!email || !email.includes('@') || !email.endsWith('.com')) {
+      alert('please add correct email');
       return;
     }
 
+    // 2. Phone number validation: exactly 10 digits (allowing spaces/dashes)
+    const digitsOnly = phoneNumber ? phoneNumber.replace(/\D/g, '') : '';
+    if (digitsOnly.length !== 10) {
+      alert('please enter a valid phone number (10 digits)');
+      return;
+    }
+
+    // 3. Password validation: needs letters and numbers
+    if (!password || !/(?=.*[A-Za-z])(?=.*\d)/.test(password)) {
+      alert('password need letters and nummbers');
+      return;
+    }
+
+    // Confirm password mandatory
+    if (!confirmPassword) {
+      alert('confirm password is mandotory');
+      return;
+    }
+
+    // Keep existing confirm password check
     if (password !== confirmPassword) {
-      alert('Passwords do not match');
+      alert('password not match');
       return;
     }
 
+    // 4. Role selection validation
+    if (!selectedRole) {
+      alert('select a role,who am i is mandotary');
+      return;
+    }
+
+    // 5. Terms and conditions validation
     if (!agreeTerms) {
-      alert('You must agree to the Terms & Conditions');
+      alert('agreeto the terms and conditions mandatory');
       return;
     }
 

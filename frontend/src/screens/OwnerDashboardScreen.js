@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,6 +10,9 @@ import {
   Platform,
   Image,
   Alert,
+  TextInput,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native';
@@ -17,7 +20,23 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-export default function OwnerDashboardScreen({ currentUser, boardings = [], onLogout, onAddBoarding, onDeleteBoarding, onEditBoarding }) {
+export default function OwnerDashboardScreen({ 
+  currentUser, 
+  boardings = [], 
+  onLogout, 
+  onAddBoarding, 
+  onDeleteBoarding, 
+  onEditBoarding, 
+  bookings = [], 
+  onConfirmBooking, 
+  onRejectBooking 
+}) {
+  const firstName = currentUser?.fullName?.split(' ')[0] || currentUser?.email?.split('@')[0] || 'Owner';
+  const [activeTab, setActiveTab] = React.useState('dashboard'); // 'dashboard', 'reservations', 'profile'
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [isSearchActive, setIsSearchActive] = React.useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   const handleDelete = (id) => {
     if (Platform.OS === 'web') {
       const confirmDelete = window.confirm('Are you sure you want to delete this boarding place?');
@@ -45,6 +64,8 @@ export default function OwnerDashboardScreen({ currentUser, boardings = [], onLo
   // Dynamic stats calculation
   const totalBoardings = boardings.length;
   const totalBeds = boardings.reduce((sum, b) => sum + (parseInt(b.totalBeds, 10) || 0), 0);
+  const pendingReservationsCount = bookings.filter((b) => b.status === 'pending').length;
+  const confirmedReservationsCount = bookings.filter((b) => b.status === 'confirmed').length;
 
   // Stat cards data
   const stats = [
@@ -60,24 +81,14 @@ export default function OwnerDashboardScreen({ currentUser, boardings = [], onLo
     },
     {
       title: 'Active Reservations',
-      value: '12',
-      titleColor: '#F97316', // Orange
+      value: String(confirmedReservationsCount),
+      titleColor: '#D95300', // Orange
     },
     {
-      title: 'Monthly Revenue',
-      value: 'Rs.245,000',
-      titleColor: '#EA580C', // Dark Orange
-    },
-    {
-      title: 'Pending Payments',
-      value: '4',
-      titleColor: '#8B5CF6', // Purple
+      title: 'Pending Reservations',
+      value: String(pendingReservationsCount),
+      titleColor: '#D95300', // Purple
       hasIcon: true,
-    },
-    {
-      title: 'Reviews',
-      value: '32',
-      titleColor: '#10B981', // Green
     },
   ];
 
@@ -93,22 +104,35 @@ export default function OwnerDashboardScreen({ currentUser, boardings = [], onLo
         <View style={styles.headerContainer}>
           <SafeAreaView>
             {/* Top Bar */}
-            <View style={styles.topBar}>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="menu-outline" size={26} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              <Text style={styles.headerTitle}>Owner Dashboard</Text>
-
-              <View style={styles.topBarRight}>
-                <TouchableOpacity style={[styles.iconButton, { marginRight: 8 }]} onPress={onLogout}>
-                  <Feather name="log-out" size={20} color="#FFFFFF" />
+            {isSearchActive ? (
+              <View style={styles.topBar}>
+                <TouchableOpacity style={styles.iconButton} onPress={() => { setIsSearchActive(false); setSearchQuery(''); }}>
+                  <Feather name="arrow-left" size={26} color="#FFFFFF" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton}>
-                  <Feather name="search" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
+                <TextInput
+                  style={[styles.searchInput, { color: '#FFFFFF', marginLeft: 10, fontSize: 16 }]}
+                  placeholder="Search boarding by name..."
+                  placeholderTextColor="#FFEDD5"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
               </View>
-            </View>
+            ) : (
+              <View style={styles.topBar}>
+                <TouchableOpacity style={styles.iconButton} onPress={() => setIsMenuOpen(true)}>
+                  <Ionicons name="menu-outline" size={26} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                <Text style={styles.headerTitle}>Owner Dashboard</Text>
+
+                <View style={styles.topBarRight}>
+                  <TouchableOpacity style={styles.iconButton} onPress={() => setIsSearchActive(true)}>
+                    <Feather name="search" size={20} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Greeting */}
             <View style={styles.greetingContainer}>
@@ -132,7 +156,7 @@ export default function OwnerDashboardScreen({ currentUser, boardings = [], onLo
                     <MaterialCommunityIcons
                       name="clock-alert-outline"
                       size={18}
-                      color="#8B5CF6"
+                      color="#D95300"
                       style={styles.statIcon}
                     />
                   )}
@@ -144,96 +168,221 @@ export default function OwnerDashboardScreen({ currentUser, boardings = [], onLo
 
         {/* Lower Content Section */}
         <View style={styles.lowerSection}>
-          <Text style={styles.sectionTitle}>My Boarding Places</Text>
+          {activeTab === 'reservations' ? (
+            /* Reservations Tab content */
+            <View>
+              <Text style={styles.sectionTitle}>Reservations</Text>
 
-          {boardings.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
-              <Feather name="home" size={32} color="#94A3B8" />
-              <Text style={styles.emptyStateText}>No boarding places listed yet.</Text>
-              <Text style={styles.emptyStateSubtext}>Tap "Add New Boarding" to add your first property!</Text>
-            </View>
-          ) : (
-            boardings.map((boarding, index) => (
-              <TouchableOpacity
-                key={boarding._id || index}
-                style={styles.boardingCard}
-                activeOpacity={0.9}
-                onPress={() => onEditBoarding && onEditBoarding(boarding)}
-              >
-                <View style={styles.boardingHeaderRow}>
-                  <View style={styles.boardingTypeContainer}>
-                    <Text style={styles.boardingTypeText}>{boarding.boardingType}</Text>
-                  </View>
-                  <Text style={styles.propertyName} numberOfLines={1}>
-                    {boarding.boardingName}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => handleDelete(boarding._id)}
-                    style={styles.deleteButton}
-                    hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                  >
-                    <Feather name="trash-2" size={18} color="#EF4444" />
-                  </TouchableOpacity>
+              {bookings.length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Feather name="calendar" size={32} color="#94A3B8" />
+                  <Text style={styles.emptyStateText}>No reservations found.</Text>
+                  <Text style={styles.emptyStateSubtext}>When students book your properties, they will appear here!</Text>
                 </View>
-
-                <View style={styles.boardingBodyRow}>
-                  {boarding.coverImage ? (
-                    <Image source={{ uri: boarding.coverImage }} style={styles.boardingImage} />
-                  ) : (
-                    <View style={styles.boardingImagePlaceholder}>
-                      <Ionicons name="image-outline" size={20} color="#94A3B8" />
-                    </View>
-                  )}
-
-                  <View style={styles.boardingDetails}>
-                    <View style={styles.locationRow}>
-                      <Feather name="map-pin" size={11} color="#64748B" style={{ marginRight: 4 }} />
-                      <Text style={styles.boardingLocation} numberOfLines={1}>
-                        {boarding.location}
+              ) : (
+                bookings.map((booking) => (
+                  <View key={booking._id} style={styles.boardingCard}>
+                    <View style={styles.boardingHeaderRow}>
+                      <View style={[
+                        styles.statusBadge,
+                        booking.status === 'confirmed' && styles.statusConfirmed,
+                        booking.status === 'rejected' && styles.statusRejected,
+                        booking.status === 'pending' && styles.statusPending,
+                      ]}>
+                        <Text style={[
+                          styles.statusBadgeText,
+                          booking.status === 'confirmed' && styles.statusTextConfirmed,
+                          booking.status === 'rejected' && styles.statusTextRejected,
+                          booking.status === 'pending' && styles.statusTextPending,
+                        ]}>
+                          {booking.status ? booking.status.toUpperCase() : 'PENDING'}
+                        </Text>
+                      </View>
+                      <Text style={styles.propertyName} numberOfLines={1}>
+                        {booking.boarding?.boardingName || 'Unknown Boarding'}
                       </Text>
                     </View>
-                    <Text style={styles.boardingRoomStats}>
-                      {boarding.totalRooms} Rooms • {boarding.totalBeds || 0} Beds
-                    </Text>
-                    <Text style={styles.boardingPrice}>
-                      Rs. {parseInt(boarding.pricePerMonth || 0).toLocaleString()} / mo
-                    </Text>
+
+                    <View style={styles.reservationDetailBox}>
+                      <Text style={styles.reservationLabel}>
+                        Student: <Text style={styles.reservationValue}>{booking.student?.email || 'N/A'}</Text>
+                      </Text>
+                      <Text style={styles.reservationLabel}>
+                        Message: <Text style={styles.reservationValue}>"{booking.message || 'No inquiry message'}"</Text>
+                      </Text>
+                      <Text style={styles.reservationLabel}>
+                        Date: <Text style={styles.reservationValue}>{new Date(booking.createdAt).toLocaleDateString()}</Text>
+                      </Text>
+                    </View>
+
+                    {booking.status === 'pending' && (
+                      <View style={styles.actionRow}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.declineButton]}
+                          onPress={() => onRejectBooking && onRejectBooking(booking._id)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.declineButtonText}>Decline</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.confirmButton]}
+                          onPress={() => onConfirmBooking && onConfirmBooking(booking._id)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.confirmButtonText}>Confirm</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
+                ))
+              )}
+            </View>
+          ) : (
+            /* Dashboard Tab content */
+            <View>
+              <Text style={styles.sectionTitle}>My Boarding Places</Text>
+
+              {boardings.filter(b => b.boardingName?.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Feather name="home" size={32} color="#94A3B8" />
+                  <Text style={styles.emptyStateText}>No boarding places found.</Text>
+                  <Text style={styles.emptyStateSubtext}>Try adjusting your search or add a new property!</Text>
                 </View>
+              ) : (
+                boardings.filter(b => b.boardingName?.toLowerCase().includes(searchQuery.toLowerCase())).map((boarding, index) => (
+                  <TouchableOpacity
+                    key={boarding._id || index}
+                    style={styles.boardingCard}
+                    activeOpacity={0.9}
+                    onPress={() => onEditBoarding && onEditBoarding(boarding)}
+                  >
+                    <View style={styles.boardingHeaderRow}>
+                      <View style={styles.boardingTypeContainer}>
+                        <Text style={styles.boardingTypeText}>{boarding.boardingType}</Text>
+                      </View>
+                      <Text style={styles.propertyName} numberOfLines={1}>
+                        {boarding.boardingName}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => handleDelete(boarding._id)}
+                        style={styles.deleteButton}
+                        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                      >
+                        <Feather name="trash-2" size={18} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.boardingBodyRow}>
+                      {boarding.coverImage ? (
+                        <Image source={{ uri: boarding.coverImage }} style={styles.boardingImage} />
+                      ) : (
+                        <View style={styles.boardingImagePlaceholder}>
+                          <Ionicons name="image-outline" size={20} color="#94A3B8" />
+                        </View>
+                      )}
+
+                      <View style={styles.boardingDetails}>
+                        <View style={styles.locationRow}>
+                          <Feather name="map-pin" size={11} color="#64748B" style={{ marginRight: 4 }} />
+                          <Text style={styles.boardingLocation} numberOfLines={1}>
+                            {boarding.location}
+                          </Text>
+                        </View>
+                        <Text style={styles.boardingRoomStats}>
+                          {boarding.totalRooms} Rooms • {boarding.totalBeds || 0} Beds
+                        </Text>
+                        <Text style={styles.boardingPrice}>
+                          Rs. {parseInt(boarding.pricePerMonth || 0).toLocaleString()} / mo
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+
+              <TouchableOpacity
+                style={styles.addBoardingButton}
+                onPress={onAddBoarding}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.addBoardingButtonText}>Add New Boarding</Text>
               </TouchableOpacity>
-            ))
+            </View>
           )}
-
-
-          <TouchableOpacity
-            style={styles.addBoardingButton}
-            onPress={onAddBoarding}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.addBoardingButtonText}>Add New Boarding</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
 
-
-
       {/* Bottom Tab Navigation Bar */}
       <View style={styles.bottomTabBar}>
-        <TouchableOpacity style={styles.tabItem}>
-          <Feather name="home" size={22} color="#6D28D9" />
-          <Text style={[styles.tabLabel, styles.activeTabLabel]}>Dashboard</Text>
+        <TouchableOpacity 
+          style={styles.tabItem} 
+          onPress={() => setActiveTab('dashboard')}
+        >
+          <Feather name="home" size={22} color={activeTab === 'dashboard' ? '#D95300' : '#64748B'} />
+          <Text style={[styles.tabLabel, activeTab === 'dashboard' && styles.activeTabLabel]}>Dashboard</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem}>
-          <Feather name="calendar" size={22} color="#64748B" />
-          <Text style={styles.tabLabel}>Reservations</Text>
+        <TouchableOpacity 
+          style={styles.tabItem} 
+          onPress={() => setActiveTab('reservations')}
+        >
+          <Feather name="calendar" size={22} color={activeTab === 'reservations' ? '#D95300' : '#64748B'} />
+          <Text style={[styles.tabLabel, activeTab === 'reservations' && styles.activeTabLabel]}>Reservations</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem}>
-          <Feather name="user" size={22} color="#64748B" />
-          <Text style={styles.tabLabel}>Profile</Text>
-        </TouchableOpacity>
       </View>
+    
+      {/* ── Side Menu Modal ── */}
+      <Modal visible={isMenuOpen} transparent animationType="fade" onRequestClose={() => setIsMenuOpen(false)}>
+        <View style={styles.menuOverlay}>
+          <TouchableWithoutFeedback onPress={() => setIsMenuOpen(false)}>
+            <View style={styles.menuBackdrop} />
+          </TouchableWithoutFeedback>
+          
+          <View style={styles.menuContent}>
+            <View style={styles.menuHeader}>
+              <View style={styles.menuAvatarWrapper}>
+                <Image 
+                  source={{uri: 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}} 
+                  style={styles.menuAvatar} 
+                />
+              </View>
+              <Text style={[styles.menuUserName, {color: '#D95300'}]}>{firstName || 'shasha!'}</Text>
+            </View>
+
+            <ScrollView style={styles.menuList}>
+              <TouchableOpacity style={styles.menuItem}>
+                <Feather name="user" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Edit Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem}>
+                <Feather name="lock" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Security Settings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem}>
+                <Feather name="bell" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Notification Preferences</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem}>
+                <Feather name="shield" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Verification Center</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem}>
+                <Feather name="settings" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Account Settings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem}>
+                <Feather name="help-circle" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Help & Support</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setIsMenuOpen(false); onLogout && onLogout(); }}>
+                <Feather name="log-out" size={20} color="#64748B" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>Logout</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -247,7 +396,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100, // Margin to prevent overlapping with bottom tab bar
   },
   headerContainer: {
-    backgroundColor: '#6D28D9', // Deep purple
+    backgroundColor: '#D95300', // Orange
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     paddingHorizontal: 16,
@@ -283,7 +432,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   subGreetingText: {
-    color: '#E9D5FF', // Soft purple
+    color: '#FFEDD5', // Soft purple
     fontSize: 14,
     fontWeight: '500',
     marginTop: 4,
@@ -337,6 +486,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 15,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#0F172A',
   },
   reservationCard: {
     backgroundColor: '#FFFFFF',
@@ -411,6 +577,71 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  
+  // ── Menu Styles ──
+  menuOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  menuContent: {
+    width: width * 0.75,
+    backgroundColor: '#FFFFFF',
+    height: '100%',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  menuHeader: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  menuAvatarWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  menuAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  menuUserName: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  menuList: {
+    flex: 1,
+    paddingTop: 10,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  menuItemIcon: {
+    marginRight: 16,
+  },
+  menuItemText: {
+    fontSize: 15,
+    color: '#1E293B',
+    fontWeight: '500',
+  },
   bottomTabBar: {
     position: 'absolute',
     bottom: 0,
@@ -435,18 +666,18 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   activeTabLabel: {
-    color: '#6D28D9',
+    color: '#D95300',
     fontWeight: '700',
   },
   addBoardingButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6D28D9',
+    backgroundColor: '#D95300',
     borderRadius: 14,
     paddingVertical: 14,
     marginTop: 16,
-    shadowColor: '#6D28D9',
+    shadowColor: '#D95300',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
@@ -464,10 +695,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#6D28D9',
+    backgroundColor: '#D95300',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#6D28D9',
+    shadowColor: '#D95300',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -493,7 +724,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   boardingTypeContainer: {
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#FFF7ED',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -502,7 +733,7 @@ const styles = StyleSheet.create({
   boardingTypeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#6D28D9',
+    color: '#D95300',
   },
   boardingBodyRow: {
     flexDirection: 'row',
@@ -577,5 +808,80 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  reservationDetailBox: {
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  reservationLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  reservationValue: {
+    fontWeight: '500',
+    color: '#334155',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    gap: 8,
+  },
+  actionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  declineButton: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  declineButtonText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  confirmButton: {
+    backgroundColor: '#D95300',
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  statusPending: {
+    backgroundColor: '#FFFBEB',
+  },
+  statusConfirmed: {
+    backgroundColor: '#ECFDF5',
+  },
+  statusRejected: {
+    backgroundColor: '#FEF2F2',
+  },
+  statusBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  statusTextPending: {
+    color: '#D97706',
+  },
+  statusTextConfirmed: {
+    color: '#059669',
+  },
+  statusTextRejected: {
+    color: '#DC2626',
   },
 });
